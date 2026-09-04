@@ -112,7 +112,7 @@
             groundY = canvasHeight - 60,
             gridTop = groundY - gridRows * cellSize,
             gridRightEdge = gridLeft + gridCols * cellSize,
-            pieceColors = { I: "#06ffa5", O: "#ffbe0b", T: "#ff006e", L: "#fb5607", J: "#8338ec", S: "#3a86ff", Z: "#ff4444" },
+            pieceColors = { I: "#06ffa5", O: "#ffff00", T: "#9900ff", L: "#ffaa00", J: "#0000ff", S: "#00ff00", Z: "#ff0000" },
             pieceShapes = {
                 I: [
                     [0, 0, 0, 0],
