@@ -478,7 +478,7 @@
                 (ctx.fillStyle = "rgba(255, 0, 110, 0.25)"),
                 ctx.fillRect(x - towerWidth / 2 - 1, baseY - towerHeight, 1, towerHeight);
         }
-        function drawBrick(x, y, color, isLocked) {
+        function drawBrick(x, y, color) {
             (ctx.fillStyle = color),
                 ctx.fillRect(x, y, cellSize, cellSize),
                 (ctx.fillStyle = "rgba(255, 255, 255, 0.35)"),
@@ -491,8 +491,7 @@
                 ctx.fillRect(x, y, cellSize, 1),
                 ctx.fillRect(x, y, 1, cellSize),
                 ctx.fillRect(x, y + cellSize - 1, cellSize, 1),
-                ctx.fillRect(x + cellSize - 1, y, 1, cellSize),
-                isLocked && ((ctx.fillStyle = "rgba(0, 0, 0, 0.4)"), ctx.fillRect(x, y + Math.floor(cellSize / 2), cellSize, 1));
+                ctx.fillRect(x + cellSize - 1, y, 1, cellSize);
         }
 
         function drawGrid() {
@@ -516,7 +515,7 @@
         }
 
         function drawLockedBricks() {
-            for (let rowIndex = 0; rowIndex < gridRows; rowIndex++) for (let colIndex = 0; colIndex < gridCols; colIndex++) board[rowIndex][colIndex] && drawBrick(gridLeft + colIndex * cellSize, gridTop + rowIndex * cellSize, board[rowIndex][colIndex], !0);
+            for (let rowIndex = 0; rowIndex < gridRows; rowIndex++) for (let colIndex = 0; colIndex < gridCols; colIndex++) board[rowIndex][colIndex] && drawBrick(gridLeft + colIndex * cellSize, gridTop + rowIndex * cellSize, board[rowIndex][colIndex]);
         }
 
         function drawGhostPiece() {
@@ -540,7 +539,7 @@
                     if (!currentPiece.shape[rowIndex][colIndex]) continue;
                     let pixelX = gridLeft + (currentPiece.x + colIndex) * cellSize,
                         pixelY = gridTop + (currentPiece.y + rowIndex) * cellSize;
-                    pixelY >= gridTop - cellSize && drawBrick(pixelX, pixelY, currentPiece.color, !1);
+                    pixelY >= gridTop - cellSize && drawBrick(pixelX, pixelY, currentPiece.color);
                 }
             ctx.shadowBlur = 0;
         }
@@ -748,7 +747,7 @@
                 [6, gridRows - 2],
                 [5, gridRows - 3],
             ];
-            for (let [colIndex, rowIndex] of demoBrickPositions) drawBrick(gridLeft + colIndex * cellSize, gridTop + rowIndex * cellSize, "#ffbe0b", !0);
+            for (let [colIndex, rowIndex] of demoBrickPositions) drawBrick(gridLeft + colIndex * cellSize, gridTop + rowIndex * cellSize, "#ffbe0b");
             drawEnemy({ x: 540, y: groundY + 2, type: enemyTypes[1], state: "walking", shamble: timestamp * 0.005, anim: timestamp, deathTime: 0 }, timestamp);
             let centerX = canvasWidth / 2,
                 titleBob = Math.sin(timestamp * 0.0025) * 4;
