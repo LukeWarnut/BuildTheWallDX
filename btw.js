@@ -114,7 +114,12 @@
             gridRightEdge = gridLeft + gridCols * cellSize,
             pieceColors = { I: "#06ffa5", O: "#ffbe0b", T: "#ff006e", L: "#fb5607", J: "#8338ec", S: "#3a86ff", Z: "#ff4444" },
             pieceShapes = {
-                I: [[1, 1, 1, 1]],
+                I: [
+                    [0, 0, 0, 0],
+                    [1, 1, 1, 1],
+                    [0, 0, 0, 0],
+                    [0, 0, 0, 0],
+                ],
                 O: [
                     [1, 1],
                     [1, 1],
@@ -122,24 +127,89 @@
                 T: [
                     [0, 1, 0],
                     [1, 1, 1],
+                    [0, 0, 0],
                 ],
                 L: [
                     [0, 0, 1],
                     [1, 1, 1],
+                    [0, 0, 0],
                 ],
                 J: [
                     [1, 0, 0],
                     [1, 1, 1],
+                    [0, 0, 0],
                 ],
                 S: [
                     [0, 1, 1],
                     [1, 1, 0],
+                    [0, 0, 0],
                 ],
                 Z: [
                     [1, 1, 0],
                     [0, 1, 1],
+                    [0, 0, 0],
                 ],
             },
+            srsKickOffsetsI = [
+                [
+                    [0, 0],
+                    [-2, 0],
+                    [1, 0],
+                    [-2, 1],
+                    [1, -2],
+                ],
+                [
+                    [0, 0],
+                    [-1, 0],
+                    [2, 0],
+                    [-1, -2],
+                    [2, 1],
+                ],
+                [
+                    [0, 0],
+                    [2, 0],
+                    [-1, 0],
+                    [2, -1],
+                    [-1, 2],
+                ],
+                [
+                    [0, 0],
+                    [1, 0],
+                    [-2, 0],
+                    [1, 2],
+                    [-2, -1],
+                ],
+            ],
+            srsKickOffsetsJlstz = [
+                [
+                    [0, 0],
+                    [-1, 0],
+                    [-1, -1],
+                    [0, 2],
+                    [-1, 2],
+                ],
+                [
+                    [0, 0],
+                    [1, 0],
+                    [1, 1],
+                    [0, -2],
+                    [1, -2],
+                ],
+                [
+                    [0, 0],
+                    [1, 0],
+                    [1, -1],
+                    [0, 2],
+                    [1, 2],
+                ],
+                [
+                    [0, 0],
+                    [-1, 0],
+                    [-1, 1],
+                    [0, -2],
+                    [-1, -2],
+                ],
+            ],
             pieceTypeKeys = Object.keys(pieceShapes),
             gamePhase = "title",
             board,
@@ -187,7 +257,7 @@
         function spawnRandomPiece() {
             let pieceType = pieceTypeKeys[Math.floor(Math.random() * pieceTypeKeys.length)],
                 shape = pieceShapes[pieceType].map((row) => [...row]);
-            return { type: pieceType, shape: shape, color: pieceColors[pieceType], x: Math.floor((gridCols - shape[0].length) / 2), y: 0 };
+            return { type: pieceType, shape: shape, rotation: 0, color: pieceColors[pieceType], x: Math.floor((gridCols - shape[0].length) / 2), y: pieceType === "I" ? -1 : 0 };
         }
 
         function rotateShapeMatrix(matrix) {
@@ -234,10 +304,15 @@
 
         function rotateCurrentPiece() {
             let rotatedShape = rotateShapeMatrix(currentPiece.shape),
-                wallKickOffsets = [0, -1, 1, -2, 2];
-            for (let offset of wallKickOffsets)
-                if (!collides(currentPiece, offset, 0, rotatedShape)) {
-                    (currentPiece.shape = rotatedShape), (currentPiece.x += offset), playSound(420, 0.04, "square", 0.05);
+                fromRotation = currentPiece.rotation,
+                kicks = currentPiece.type === "O" ? [[0, 0]] : (currentPiece.type === "I" ? srsKickOffsetsI : srsKickOffsetsJlstz)[fromRotation];
+            for (let kick of kicks)
+                if (!collides(currentPiece, kick[0], kick[1], rotatedShape)) {
+                    (currentPiece.shape = rotatedShape),
+                        (currentPiece.x += kick[0]),
+                        (currentPiece.y += kick[1]),
+                        (currentPiece.rotation = (fromRotation + 1) % 4),
+                        playSound(420, 0.04, "square", 0.05);
                     return;
                 }
         }
@@ -539,7 +614,7 @@
                     if (!currentPiece.shape[rowIndex][colIndex]) continue;
                     let pixelX = gridLeft + (currentPiece.x + colIndex) * cellSize,
                         pixelY = gridTop + (currentPiece.y + rowIndex) * cellSize;
-                    pixelY >= gridTop - cellSize && drawBrick(pixelX, pixelY, currentPiece.color);
+                    pixelY >= gridTop && drawBrick(pixelX, pixelY, currentPiece.color);
                 }
             ctx.shadowBlur = 0;
         }
@@ -720,13 +795,15 @@
             let previewLeft = 780,
                 previewTop = 14,
                 previewCellSize = 11;
-            for (let rowIndex = 0; rowIndex < nextPiece.shape.length; rowIndex++)
+            let previewRowOffset = 0;
+            while (previewRowOffset < nextPiece.shape.length && !nextPiece.shape[previewRowOffset].some((cell) => cell)) previewRowOffset++;
+            for (let rowIndex = previewRowOffset; rowIndex < nextPiece.shape.length; rowIndex++)
                 for (let colIndex = 0; colIndex < nextPiece.shape[rowIndex].length; colIndex++)
                     nextPiece.shape[rowIndex][colIndex] &&
                         ((ctx.fillStyle = nextPiece.color),
-                        ctx.fillRect(previewLeft + colIndex * previewCellSize, previewTop + rowIndex * previewCellSize, previewCellSize - 1, previewCellSize - 1),
+                        ctx.fillRect(previewLeft + colIndex * previewCellSize, previewTop + (rowIndex - previewRowOffset) * previewCellSize, previewCellSize - 1, previewCellSize - 1),
                         (ctx.fillStyle = "rgba(255, 255, 255, 0.3)"),
-                        ctx.fillRect(previewLeft + colIndex * previewCellSize, previewTop + rowIndex * previewCellSize, previewCellSize - 1, 1));
+                        ctx.fillRect(previewLeft + colIndex * previewCellSize, previewTop + (rowIndex - previewRowOffset) * previewCellSize, previewCellSize - 1, 1));
             (ctx.font = '8px "Press Start 2P"'),
                 (ctx.fillStyle = isMuted ? "#ff006e" : "rgba(255, 255, 255, 0.4)"),
                 ctx.fillText(isMuted ? "[M]UTED" : "[M]", 870, 12);
