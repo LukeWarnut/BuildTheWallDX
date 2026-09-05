@@ -450,7 +450,54 @@
                         boardCol < gridCols &&
                         ((board[boardRow][boardCol] = piece.color), spawnBrickParticles(gridLeft + boardCol * cellSize + cellSize / 2, gridTop + boardRow * cellSize + cellSize / 2), boardRow < topLockedRow && (topLockedRow = boardRow));
                 }
-            (score += 10), setShake(2.5, 90), playSound(140, 0.08, "square", 0.07), (currentPiece = nextPiece), (nextPiece = spawnRandomPiece()), collides(currentPiece, 0, 0) && gameOver();
+            score += 10;
+            let clearedRows = clearFilledLines();
+            if (clearedRows.length) {
+                let lineScore = getLineClearScore(clearedRows.length);
+                (score += lineScore), (scorePopupRemaining = 600), spawnLineClearParticles(clearedRows), playLineClearSound(clearedRows.length), setShake(2.5 + clearedRows.length * 2, 90 + clearedRows.length * 50);
+            } else setShake(2.5, 90), playSound(140, 0.08, "square", 0.07);
+            (currentPiece = nextPiece), (nextPiece = spawnRandomPiece()), collides(currentPiece, 0, 0) && gameOver();
+        }
+
+        function clearFilledLines() {
+            let clearedRows = [];
+            for (let rowIndex = gridRows - 1; rowIndex >= 0; rowIndex--)
+                if (board[rowIndex].every((cell) => cell !== null)) {
+                    clearedRows.push(rowIndex);
+                    board.splice(rowIndex, 1);
+                    board.unshift(Array(gridCols).fill(null));
+                    rowIndex++;
+                }
+            return clearedRows;
+        }
+
+        function getLineClearScore(linesCleared) {
+            return 100 * level * Math.pow(2, linesCleared - 1);
+        }
+
+        function spawnLineClearParticles(clearedRows) {
+            for (let rowIndex of clearedRows)
+                for (let colIndex = 0; colIndex < gridCols; colIndex++)
+                    for (let particleIndex = 0; particleIndex < 2; particleIndex++)
+                        particles.push({
+                            x: gridLeft + colIndex * cellSize + cellSize / 2,
+                            y: gridTop + rowIndex * cellSize + cellSize / 2,
+                            vx: (Math.random() - 0.5) * 0.35,
+                            vy: -Math.random() * 0.25 - 0.08,
+                            life: 500 + Math.random() * 300,
+                            maxLife: 800,
+                            color: particleIndex % 2 === 0 ? "#ffbe0b" : "#06ffa5",
+                            size: 2 + Math.random() * 3,
+                            gravity: 4e-4,
+                        });
+        }
+
+        function playLineClearSound(linesCleared) {
+            let baseFrequency = 220 + linesCleared * 80;
+            playSound(baseFrequency, 0.1, "square", 0.08);
+            linesCleared > 1 && playSound(baseFrequency * 1.5, 0.12, "square", 0.07);
+            linesCleared > 2 && playSound(baseFrequency * 2, 0.14, "square", 0.06);
+            linesCleared > 3 && playSound(baseFrequency * 2.5, 0.18, "square", 0.08);
         }
 
         function hardDrop() {
