@@ -18,8 +18,26 @@
         }
     }
 
+    function readStoredJson(storageKey, defaultValue) {
+        try {
+            let storedString = window.localStorage.getItem(storageKey);
+            if (storedString === null) return defaultValue;
+            return JSON.parse(storedString);
+        } catch {
+            return defaultValue;
+        }
+    }
+
+    function storeJson(storageKey, value) {
+        try {
+            return window.localStorage.setItem(storageKey, JSON.stringify(value)), !0;
+        } catch {
+            return !1;
+        }
+    }
+
     function createHighScore(gameId) {
-        let storageKey = `wh-games.${gameId}.best`,
+        let storageKey = `lukewarnut.${gameId}.best`,
             bestScore = readStoredNumber(storageKey, 0);
         return {
             key: storageKey,
@@ -83,6 +101,7 @@
         
         };
     }
+
     function mapTapToAction(tapX, tapY, gamePhase, layout) {
         return gamePhase === "title" || gamePhase === "gameover"
             ? "start"
@@ -233,7 +252,145 @@
             useTouchControls =
                 typeof window.matchMedia == "function" &&
                 window.matchMedia("(hover: none) and (pointer: coarse)").matches,
-            highScore = createHighScore("build-the-wall");
+            highScore = createHighScore("build-the-wall"),
+            defaultKeyBinds = {
+                left: ["ArrowLeft", "KeyA"],
+                right: ["ArrowRight", "KeyD"],
+                rotate: ["ArrowUp", "KeyW"],
+                drop: ["ArrowDown", "KeyS"],
+                slam: ["Space"],
+                pause: ["KeyP"],
+                mute: ["KeyM"],
+            },
+            remapActions = [
+                { id: "left", label: "LEFT" },
+                { id: "right", label: "RIGHT" },
+                { id: "rotate", label: "ROTATE" },
+                { id: "drop", label: "DROP" },
+                { id: "slam", label: "SLAM" },
+                { id: "pause", label: "PAUSE" },
+                { id: "mute", label: "MUTE" },
+            ],
+            remapMenuExtra = ["RESET DEFAULTS", "BACK"],
+            remapMenuLength = remapActions.length + remapMenuExtra.length,
+            remapMenuStartY = 168,
+            remapMenuRowHeight = 42,
+            blockedBindCodes = new Set(["Escape", "Tab", "MetaLeft", "MetaRight", "CapsLock", "NumLock", "ScrollLock"]),
+            keyBindsStorageKey = "lukewarnut.build-the-wall.keys",
+            controlsMenuOpen = !1,
+            isListeningForKey = !1,
+            selectedRemapIndex = 0,
+            keyBinds = normalizeKeyBinds(readStoredJson(keyBindsStorageKey, null));
+
+        function normalizeKeyBinds(raw) {
+            let normalized = {};
+            for (let actionId of Object.keys(defaultKeyBinds)) {
+                let codes = raw && Array.isArray(raw[actionId]) ? raw[actionId].filter((code) => typeof code === "string" && code.length > 0) : [];
+                normalized[actionId] = codes.length ? [...new Set(codes)] : [...defaultKeyBinds[actionId]];
+            }
+            return normalized;
+        }
+
+        function persistKeyBinds() {
+            storeJson(keyBindsStorageKey, keyBinds);
+        }
+
+        function keyCodeLabel(code) {
+            let labels = {
+                Space: "SPACE",
+                ArrowLeft: "\u2190",
+                ArrowRight: "\u2192",
+                ArrowUp: "\u2191",
+                ArrowDown: "\u2193",
+                Escape: "ESC",
+                Enter: "ENTER",
+                ShiftLeft: "L-SHIFT",
+                ShiftRight: "R-SHIFT",
+                ControlLeft: "L-CTRL",
+                ControlRight: "R-CTRL",
+                AltLeft: "L-ALT",
+                AltRight: "R-ALT",
+                Minus: "-",
+                Equal: "=",
+                BracketLeft: "[",
+                BracketRight: "]",
+                Backslash: "\\",
+                Semicolon: ";",
+                Quote: "'",
+                Comma: ",",
+                Period: ".",
+                Slash: "/",
+                Backquote: "`",
+                Backspace: "BKSP",
+            };
+            if (labels[code]) return labels[code];
+            if (code.startsWith("Key")) return code.slice(3);
+            if (code.startsWith("Digit")) return code.slice(5);
+            if (code.startsWith("Numpad")) return "NUM" + code.slice(6);
+            return code.toUpperCase();
+        }
+
+        function formatBind(actionId) {
+            return keyBinds[actionId].map(keyCodeLabel).join(" / ");
+        }
+
+        function actionFromKeyCode(code) {
+            for (let actionId of Object.keys(keyBinds)) if (keyBinds[actionId].includes(code)) return actionId;
+            return null;
+        }
+
+        function assignKeyBind(actionId, code) {
+            if (keyBinds[actionId].length === 1 && keyBinds[actionId][0] === code) return;
+            let previousPrimary = keyBinds[actionId][0];
+            for (let otherId of Object.keys(keyBinds)) {
+                if (otherId === actionId) continue;
+                if (!keyBinds[otherId].includes(code)) continue;
+                keyBinds[otherId] = keyBinds[otherId].filter((bound) => bound !== code);
+                if (!keyBinds[otherId].length) keyBinds[otherId] = [previousPrimary];
+            }
+            keyBinds[actionId] = [code];
+            persistKeyBinds();
+        }
+
+        function resetKeyBinds() {
+            (keyBinds = normalizeKeyBinds(null)), persistKeyBinds();
+        }
+
+        function openControlsMenu() {
+            (controlsMenuOpen = !0), (isListeningForKey = !1), (selectedRemapIndex = 0);
+        }
+
+        function closeControlsMenu() {
+            (controlsMenuOpen = !1), (isListeningForKey = !1);
+        }
+
+        function activateRemapMenuItem() {
+            if (selectedRemapIndex < remapActions.length) {
+                (isListeningForKey = !0), playSound(400, 0.04, "square", 0.05);
+                return;
+            }
+            if (selectedRemapIndex === remapActions.length) {
+                resetKeyBinds(), playSound(660, 0.08, "square", 0.06);
+                return;
+            }
+            closeControlsMenu(), playSound(280, 0.04, "square", 0.04);
+        }
+
+        function remapRowIndexAtY(screenY) {
+            let itemIndex = Math.floor((screenY - (remapMenuStartY - 26)) / remapMenuRowHeight);
+            return itemIndex < 0 || itemIndex >= remapMenuLength ? -1 : itemIndex;
+        }
+
+        function handleControlsMenuPointer(screenY) {
+            if (isListeningForKey) {
+                isListeningForKey = !1;
+                return;
+            }
+            let itemIndex = remapRowIndexAtY(screenY);
+            if (itemIndex < 0) return;
+            (selectedRemapIndex = itemIndex), activateRemapMenuItem();
+        }
+
         function resetGame() {
             (board = Array.from({ length: gridRows }, () => Array(gridCols).fill(null))),
                 (score = 0),
@@ -553,6 +710,7 @@
                 (ctx.fillStyle = "rgba(255, 0, 110, 0.25)"),
                 ctx.fillRect(x - towerWidth / 2 - 1, baseY - towerHeight, 1, towerHeight);
         }
+
         function drawBrick(x, y, color) {
             (ctx.fillStyle = color),
                 ctx.fillRect(x, y, cellSize, cellSize),
@@ -734,6 +892,7 @@
                 ctx.strokeRect(660, signBaseY - 40, 120, 32),
                 (ctx.shadowBlur = 0);
         }
+        
         function drawHud() {
             (ctx.fillStyle = "rgba(0, 0, 0, 0.7)"),
                 ctx.fillRect(0, 0, canvasWidth, 52),
@@ -806,7 +965,7 @@
                         ctx.fillRect(previewLeft + colIndex * previewCellSize, previewTop + (rowIndex - previewRowOffset) * previewCellSize, previewCellSize - 1, 1));
             (ctx.font = '8px "Press Start 2P"'),
                 (ctx.fillStyle = isMuted ? "#ff006e" : "rgba(255, 255, 255, 0.4)"),
-                ctx.fillText(isMuted ? "[M]UTED" : "[M]", 870, 12);
+                ctx.fillText(isMuted ? "MUTED" : `[${formatBind("mute")}]`, 870, 12);
         }
 
         function drawTitleScreen(timestamp) {
@@ -826,6 +985,10 @@
             ];
             for (let [colIndex, rowIndex] of demoBrickPositions) drawBrick(gridLeft + colIndex * cellSize, gridTop + rowIndex * cellSize, "#ffbe0b");
             drawEnemy({ x: 540, y: groundY + 2, type: enemyTypes[1], state: "walking", shamble: timestamp * 0.005, anim: timestamp, deathTime: 0 }, timestamp);
+            if (controlsMenuOpen) {
+                drawControlsMenu(timestamp);
+                return;
+            }
             let centerX = canvasWidth / 2,
                 titleBob = Math.sin(timestamp * 0.0025) * 4;
             (ctx.textAlign = "center"),
@@ -860,14 +1023,18 @@
                 ctx.fillText(
                     useTouchControls
                         ? "DRAG MOVE   TAP ROTATE   FLICK DOWN SLAM"
-                        : "\u2190 \u2192 MOVE   \u2191 ROTATE   \u2193 DROP   SPACE SLAM",
+                        : `MOVE ${formatBind("left")}, ${formatBind("right")}   ROTATE ${formatBind("rotate")}   DROP ${formatBind("drop")}   SLAM ${formatBind("slam")}`,
                     centerX,
                     455
                 ),
+                !useTouchControls &&
+                    ((ctx.fillStyle = "#06ffa5"),
+                    (ctx.shadowColor = "#06ffa5"),
+                    ctx.fillText("PRESS C TO REMAP KEYS", centerX, 480)),
                 highScore.value() > 0 &&
                     ((ctx.fillStyle = "#ff006e"),
                     (ctx.shadowColor = "#ff006e"),
-                    ctx.fillText("HI-SCORE  " + String(highScore.value()).padStart(6, "0"), centerX, 490)),
+                    ctx.fillText("HI-SCORE  " + String(highScore.value()).padStart(6, "0"), centerX, useTouchControls ? 490 : 512)),
                 (ctx.font = '8px "Press Start 2P"'),
                 (ctx.fillStyle = "rgba(255, 255, 255, 0.5)"),
                 (ctx.shadowBlur = 0),
@@ -875,6 +1042,57 @@
                 (ctx.shadowBlur = 0),
                 (ctx.textAlign = "left");
         }
+
+        function drawControlsMenu(timestamp) {
+            (ctx.fillStyle = "rgba(8, 0, 18, 0.72)"), ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+            let centerX = canvasWidth / 2,
+                labelX = centerX - 250,
+                valueX = centerX + 250;
+            (ctx.textAlign = "center"),
+                (ctx.font = '22px "Press Start 2P"'),
+                (ctx.shadowColor = "#ffbe0b"),
+                (ctx.shadowBlur = 18),
+                (ctx.fillStyle = "#ffbe0b"),
+                ctx.fillText("KEY CONFIG", centerX, 92),
+                (ctx.font = '8px "Press Start 2P"'),
+                (ctx.fillStyle = "#8338ec"),
+                (ctx.shadowColor = "#8338ec"),
+                (ctx.shadowBlur = 6),
+                ctx.fillText("CHOOSE A BINDING  THEN PRESS ENTER", centerX, 122);
+            for (let itemIndex = 0; itemIndex < remapMenuLength; itemIndex++) {
+                let rowY = remapMenuStartY + itemIndex * remapMenuRowHeight,
+                    isSelected = itemIndex === selectedRemapIndex,
+                    isBindRow = itemIndex < remapActions.length,
+                    label = isBindRow ? remapActions[itemIndex].label : remapMenuExtra[itemIndex - remapActions.length],
+                    value = isBindRow ? (isListeningForKey && isSelected ? (Math.floor(timestamp / 400) % 2 === 0 ? "PRESS KEY" : " ") : formatBind(remapActions[itemIndex].id)) : "";
+                if (isSelected) {
+                    (ctx.fillStyle = "rgba(6, 255, 165, 0.12)"),
+                        ctx.fillRect(centerX - 310, rowY - 26, 620, 36),
+                        (ctx.strokeStyle = isListeningForKey && isBindRow ? "#ff006e" : "#06ffa5"),
+                        (ctx.shadowColor = ctx.strokeStyle),
+                        (ctx.shadowBlur = 10),
+                        (ctx.lineWidth = 2),
+                        ctx.strokeRect(centerX - 310, rowY - 26, 620, 36);
+                }
+                (ctx.font = '10px "Press Start 2P"'),
+                    (ctx.fillStyle = isSelected ? (isListeningForKey && isBindRow ? "#ff006e" : "#06ffa5") : "#ffffff"),
+                    (ctx.shadowColor = ctx.fillStyle),
+                    (ctx.shadowBlur = isSelected ? 8 : 0),
+                    (ctx.textAlign = "left"),
+                    ctx.fillText((isSelected ? "> " : "  ") + label, labelX, rowY),
+                    (ctx.textAlign = "right"),
+                    value && ctx.fillText(value, valueX, rowY);
+            }
+            (ctx.textAlign = "center"),
+                (ctx.font = '8px "Press Start 2P"'),
+                (ctx.fillStyle = "#ffbe0b"),
+                (ctx.shadowColor = "#ffbe0b"),
+                (ctx.shadowBlur = 6),
+                ctx.fillText(isListeningForKey ? "ESC CANCELS" : "ENTER SELECT   ESC BACK", centerX, 620),
+                (ctx.shadowBlur = 0),
+                (ctx.textAlign = "left");
+        }
+
         function drawGameOverScreen(timestamp) {
             (ctx.fillStyle = "rgba(8, 0, 18, 0.78)"), ctx.fillRect(0, 0, canvasWidth, canvasHeight);
             let centerX = canvasWidth / 2;
@@ -923,7 +1141,7 @@
                 (ctx.fillStyle = "#fff"),
                 (ctx.shadowColor = "#fff"),
                 (ctx.shadowBlur = 8),
-                ctx.fillText(useTouchControls ? "TAP TO RESUME" : "PRESS P TO RESUME", canvasWidth / 2, canvasHeight / 2 + 40),
+                ctx.fillText(useTouchControls ? "TAP TO RESUME" : `PRESS ${formatBind("pause")} TO RESUME`, canvasWidth / 2, canvasHeight / 2 + 40),
                 (ctx.shadowBlur = 0),
                 (ctx.textAlign = "left");
         }
@@ -941,7 +1159,7 @@
         }
 
         function startGame() {
-            resetGame(), (gamePhase = "playing");
+            closeControlsMenu(), resetGame(), (gamePhase = "playing");
         }
 
         function togglePause() {
@@ -949,36 +1167,70 @@
         }
 
         document.addEventListener("keydown", (event) => {
-            if ((resumeAudio(), event.code === "KeyM")) {
+            if ((resumeAudio(), isListeningForKey)) {
+                event.preventDefault();
+                if (event.repeat) return;
+                if (event.code === "Escape") {
+                    isListeningForKey = !1;
+                    return;
+                }
+                if (blockedBindCodes.has(event.code)) return;
+                let remapAction = remapActions[selectedRemapIndex];
+                remapAction && (assignKeyBind(remapAction.id, event.code), playSound(520, 0.05, "square", 0.06), (isListeningForKey = !1));
+                return;
+            }
+
+            if (gamePhase === "title" && controlsMenuOpen) {
+                event.code === "Escape" || event.code === "KeyC"
+                    ? (closeControlsMenu(), event.preventDefault())
+                    : event.code === "ArrowUp" || event.code === "KeyW"
+                      ? ((selectedRemapIndex = (selectedRemapIndex + remapMenuLength - 1) % remapMenuLength), playSound(320, 0.03, "square", 0.04), event.preventDefault())
+                      : event.code === "ArrowDown" || event.code === "KeyS"
+                        ? ((selectedRemapIndex = (selectedRemapIndex + 1) % remapMenuLength), playSound(320, 0.03, "square", 0.04), event.preventDefault())
+                        : (event.code === "Enter" || event.code === "Space") && (activateRemapMenuItem(), event.preventDefault());
+                return;
+            }
+
+            if (gamePhase === "title") {
+                if (event.code === "KeyC") {
+                    openControlsMenu(), playSound(400, 0.05, "square", 0.05), event.preventDefault();
+                    return;
+                }
+                if (event.code === "Space") {
+                    startGame(), event.preventDefault();
+                    return;
+                }
+            } else if (gamePhase === "gameover" && event.code === "Space") {
+                startGame(), event.preventDefault();
+                return;
+            }
+
+            let boundAction = actionFromKeyCode(event.code);
+            if (boundAction === "mute") {
                 (isMuted = !isMuted), event.preventDefault();
                 return;
             }
 
-            if (gamePhase === "title" || gamePhase === "gameover") {
-                event.code === "Space" && (startGame(), event.preventDefault());
-                return;
-            }
-
             if (gamePhase === "paused") {
-                event.code === "KeyP" && togglePause();
+                boundAction === "pause" && togglePause();
                 return;
             }
 
             if (gamePhase === "playing") {
-                if (event.code === "KeyP") {
+                if (boundAction === "pause") {
                     togglePause();
                     return;
                 }
 
-                event.code === "ArrowLeft" || event.code === "KeyA"
+                boundAction === "left"
                     ? (movePieceHorizontal(-1), event.preventDefault())
-                    : event.code === "ArrowRight" || event.code === "KeyD"
+                    : boundAction === "right"
                       ? (movePieceHorizontal(1), event.preventDefault())
-                      : event.code === "ArrowUp" || event.code === "KeyW"
+                      : boundAction === "rotate"
                         ? (rotateCurrentPiece(), event.preventDefault())
-                        : event.code === "ArrowDown" || event.code === "KeyS"
+                        : boundAction === "drop"
                           ? (softDrop(), event.preventDefault())
-                          : event.code === "Space" && (hardDrop(), event.preventDefault());
+                          : boundAction === "slam" && (hardDrop(), event.preventDefault());
             }
         });
 
@@ -1001,8 +1253,12 @@
         function handleTap(clientX, clientY) {
             let canvasRect = getCanvasRect(),
                 screenX = canvasRect.width > 0 ? ((clientX - canvasRect.left) / canvasRect.width) * canvasWidth : 0,
-                screenY = canvasRect.height > 0 ? ((clientY - canvasRect.top) / canvasRect.height) * canvasHeight : canvasHeight,
-                tapAction = mapTapToAction(screenX, screenY, gamePhase, { width: canvasWidth, hudHeight: hudHeight, muteWidth: muteButtonWidth });
+                screenY = canvasRect.height > 0 ? ((clientY - canvasRect.top) / canvasRect.height) * canvasHeight : canvasHeight;
+            if (gamePhase === "title" && controlsMenuOpen) {
+                handleControlsMenuPointer(screenY);
+                return;
+            }
+            let tapAction = mapTapToAction(screenX, screenY, gamePhase, { width: canvasWidth, hudHeight: hudHeight, muteWidth: muteButtonWidth });
             tapAction === "start"
                 ? startGame()
                 : tapAction === "pause" || tapAction === "resume"
@@ -1056,6 +1312,13 @@
                 },
                 { passive: !1 }
             );
+        canvas.addEventListener("click", (event) => {
+            if (gamePhase !== "title" || !controlsMenuOpen) return;
+            resumeAudio();
+            let canvasRect = getCanvasRect(),
+                screenY = canvasRect.height > 0 ? ((event.clientY - canvasRect.top) / canvasRect.height) * canvasHeight : canvasHeight;
+            handleControlsMenuPointer(screenY);
+        });
         let previousFrameTime = 0;
 
         function gameLoop(timestamp) {
