@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Build the Wall — Zombie Border Siege</title>
+  <title>Build the Wall DX</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
@@ -11,12 +11,23 @@
     html, body {
       margin: 0;
       padding: 0;
-      height: 100%;
+      min-height: 100%;
       background: #06000f;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    #game-wrap {
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
+      width: 100%;
+      min-height: 100vh;
+      flex-shrink: 0;
     }
 
     canvas {
@@ -28,10 +39,27 @@
       image-rendering: pixelated;
       touch-action: none;
     }
+
+    #mgs-master-collection-reference {
+      padding-bottom: 70px;
+      font-family: "Press Start 2P";
+      color: grey;
+      font-size: 13px;
+      width: 535px;
+      line-height: 1.6;
+    }
   </style>
 </head>
 <body>
-  <canvas id="game" width="960" height="660"></canvas>
+  <div id="game-wrap">
+    <canvas id="game" width="960" height="660"></canvas>
+  </div>
   <script src="btw.js"></script>
+
+  <div id="mgs-master-collection-reference">
+  This game contains expressions and themes which may be considered outdated.
+  However, these elements have been included 
+  to preserve the historical context in which the game was made
+  and the creator's original vision. Player discretion is advised.</div>
 </body>
 </html>
