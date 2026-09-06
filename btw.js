@@ -248,6 +248,13 @@
             screenShakeRemaining,
             breachFlashRemaining,
             scorePopupRemaining,
+            horizontalDasDelay = 167, // rounded from 166.66
+            horizontalArrInterval = 67,
+            heldHorizontalDirection = 0,
+            horizontalDasCounter = 0,
+            horizontalRepeatActive = !1,
+            lastHorizontalInput = 0,
+            pressedKeyCodes = new Set(),
             isMuted = !1,
             useTouchControls =
                 typeof window.matchMedia == "function" &&
@@ -407,6 +414,11 @@
                 (screenShakeRemaining = 0),
                 (breachFlashRemaining = 0),
                 (scorePopupRemaining = 0),
+                pressedKeyCodes.clear(),
+                (heldHorizontalDirection = 0),
+                (horizontalDasCounter = 0),
+                (horizontalRepeatActive = !1),
+                (lastHorizontalInput = 0),
                 (currentPiece = spawnRandomPiece()),
                 (nextPiece = spawnRandomPiece());
         }
@@ -956,22 +968,22 @@
                 (ctx.fillStyle = "#ff006e"),
                 (ctx.shadowColor = "#ff006e"),
                 (ctx.shadowBlur = 10),
-                ctx.fillText("BUILD THE WALL", 20, 32),
+                ctx.fillText("BUILD THE WALL DX", 17, 32),
                 (ctx.font = '9px "Press Start 2P"'),
                 (ctx.fillStyle = "#ffbe0b"),
                 (ctx.shadowColor = "#ffbe0b"),
                 (ctx.shadowBlur = 6),
-                ctx.fillText("SCORE", 250, 18),
+                ctx.fillText("SCORE", 275, 18),
                 (ctx.fillStyle = "#fff"),
                 (ctx.shadowBlur = 4),
-                ctx.fillText(String(score).padStart(6, "0"), 250, 36),
+                ctx.fillText(String(score).padStart(6, "0"), 275, 36),
                 (ctx.fillStyle = "#06ffa5"),
                 (ctx.shadowColor = "#06ffa5"),
                 (ctx.shadowBlur = 6),
-                ctx.fillText("HI", 380, 18),
+                ctx.fillText("HI", 395, 18),
                 (ctx.fillStyle = "#fff"),
                 (ctx.shadowBlur = 4),
-                ctx.fillText(String(Math.max(highScore.value(), score)).padStart(6, "0"), 380, 36),
+                ctx.fillText(String(Math.max(highScore.value(), score)).padStart(6, "0"), 395, 36),
                 (ctx.fillStyle = "#8338ec"),
                 (ctx.shadowColor = "#8338ec"),
                 (ctx.shadowBlur = 6),
@@ -1064,7 +1076,7 @@
                     (ctx.shadowBlur = 16),
                     ctx.fillText(useTouchControls ? "TAP TO START" : "PRESS SPACE TO START", centerX, 410)),
                 (ctx.font = '8px "Press Start 2P"'),
-                (ctx.fillStyle = "#8338ec"),
+                (ctx.fillStyle = "#ffffff"),
                 (ctx.shadowColor = "#8338ec"),
                 (ctx.shadowBlur = 6),
                 ctx.fillText(
@@ -1079,11 +1091,11 @@
                     (ctx.shadowColor = "#06ffa5"),
                     ctx.fillText("PRESS C TO REMAP KEYS", centerX, 480)),
                 highScore.value() > 0 &&
-                    ((ctx.fillStyle = "#ff006e"),
+                    ((ctx.fillStyle = "#ffffff"),
                     (ctx.shadowColor = "#ff006e"),
                     ctx.fillText("HI-SCORE  " + String(highScore.value()).padStart(6, "0"), centerX, useTouchControls ? 490 : 512)),
                 (ctx.font = '8px "Press Start 2P"'),
-                (ctx.fillStyle = "rgba(255, 255, 255, 0.5)"),
+                (ctx.fillStyle = "rgba(255, 255, 255, 0.75)"),
                 (ctx.shadowBlur = 0),
                 ctx.fillText("\xA9 198X  ARCADE EDITION", centerX, 540),
                 (ctx.shadowBlur = 0),
@@ -1197,6 +1209,24 @@
             ensureAudio(), audioContext && audioContext.state === "suspended" && audioContext.resume();
         }
 
+        function clearHorizontalHold() {
+            (heldHorizontalDirection = 0), (horizontalDasCounter = 0), (horizontalRepeatActive = !1);
+        }
+
+        function syncHorizontalHoldFromPressedKeys() {
+            let leftHeld = keyBinds.left.some((code) => pressedKeyCodes.has(code)),
+                rightHeld = keyBinds.right.some((code) => pressedKeyCodes.has(code)),
+                newDirection = leftHeld && !rightHeld ? -1 : rightHeld && !leftHeld ? 1 : leftHeld && rightHeld ? lastHorizontalInput : 0;
+            newDirection === 0 ? clearHorizontalHold() : newDirection !== heldHorizontalDirection && ((heldHorizontalDirection = newDirection), (horizontalDasCounter = 0), (horizontalRepeatActive = !1));
+        }
+
+        function updateHorizontalHold(deltaMs) {
+            if (!heldHorizontalDirection || gamePhase !== "playing") return;
+            horizontalDasCounter += deltaMs;
+            let threshold = horizontalRepeatActive ? horizontalArrInterval : horizontalDasDelay;
+            for (; horizontalDasCounter >= threshold; ) (horizontalDasCounter -= threshold), (horizontalRepeatActive = !0), movePieceHorizontal(heldHorizontalDirection);
+        }
+
         function movePieceHorizontal(direction) {
             gamePhase === "playing" && (collides(currentPiece, direction, 0) || ((currentPiece.x += direction), playSound(220, 0.025, "square", 0.04)));
         }
@@ -1270,16 +1300,23 @@
                 }
 
                 boundAction === "left"
-                    ? (movePieceHorizontal(-1), event.preventDefault())
+                    ? event.repeat
+                        ? event.preventDefault()
+                        : (pressedKeyCodes.add(event.code), (lastHorizontalInput = -1), syncHorizontalHoldFromPressedKeys(), movePieceHorizontal(-1), event.preventDefault())
                     : boundAction === "right"
-                      ? (movePieceHorizontal(1), event.preventDefault())
+                      ? event.repeat
+                          ? event.preventDefault()
+                          : (pressedKeyCodes.add(event.code), (lastHorizontalInput = 1), syncHorizontalHoldFromPressedKeys(), movePieceHorizontal(1), event.preventDefault())
                       : boundAction === "rotate"
                         ? (rotateCurrentPiece(), event.preventDefault())
                         : boundAction === "drop"
                           ? (softDrop(), event.preventDefault())
                           : boundAction === "slam" && (hardDrop(), event.preventDefault());
             }
-        });
+        }),
+            document.addEventListener("keyup", (event) => {
+                pressedKeyCodes.has(event.code) && (pressedKeyCodes.delete(event.code), syncHorizontalHoldFromPressedKeys());
+            });
 
         let gestureTracker = createGestureTracker(),
             hudHeight = 52,
@@ -1380,6 +1417,7 @@
                     playSound(660, 0.08, "square", 0.07),
                     playSound(880, 0.12, "square", 0.06)),
                     (gravityTimer += deltaMs),
+                    updateHorizontalHold(deltaMs),
                     gravityTimer >= gravityInterval && ((gravityTimer = 0), collides(currentPiece, 0, 1) ? lockPiece(currentPiece) : currentPiece.y++),
                     (enemySpawnCountdown -= deltaMs),
                     enemySpawnCountdown <= 0 && (spawnEnemy(), (enemySpawnCountdown = enemySpawnInterval * (0.65 + Math.random() * 0.7))),
